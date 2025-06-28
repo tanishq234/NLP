@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amazon Alexa Review Sentiment Analyzer</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" />
+  <style>
+    body {
+      background-color: #f0f4f8;
+    }
+    textarea {
+      resize: vertical;
+    }
+  </style>
+</head>
+<body class="text-gray-800">
+  <main class="container mx-auto px-4 py-10">
+    <h1 class="text-4xl font-bold text-center mb-10 text-blue-700">Amazon Alexa Review Sentiment Analyzer</h1>
+
+    <div class="flex flex-wrap justify-center gap-10">
+      <!-- Input Section -->
+      <div class="w-full md:w-5/12 bg-white p-6 rounded-2xl shadow-lg">
+        <h2 class="text-2xl font-semibold mb-4 text-blue-600">Input</h2>
+
+        <label class="block mb-2 text-sm font-medium">Upload CSV File</label>
+        <input type="file" id="csvFileInput" accept=".csv"
+               class="block w-full text-sm border border-gray-300 rounded-lg p-2 mb-4">
+
+        <label class="block mb-2 text-sm font-medium">Or Enter Text</label>
+        <textarea id="textInput" rows="4" placeholder="Type a review here..."
+                  class="w-full p-2 border border-gray-300 rounded-lg mb-4"></textarea>
+
+        <button onclick="predict()" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition duration-150">
+          Predict
+        </button>
+      </div>
+
+      <!-- Output Section -->
+      <div class="w-full md:w-5/12 bg-white p-6 rounded-2xl shadow-lg">
+        <h2 class="text-2xl font-semibold mb-4 text-green-700">Prediction Result</h2>
+        <div id="predictionResult" class="mb-4 text-lg font-medium text-gray-800"></div>
+
+        <h2 class="text-2xl font-semibold mb-4 text-green-700">Graph</h2>
+        <div id="graphContainer" class="mb-4"></div>
+
+        <button id="downloadBtn" style="display: none;"
+                class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition duration-150">
+          Download Predictions
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    async function predict() {
+      const csvInput = document.getElementById("csvFileInput");
+      const textInput = document.getElementById("textInput").value.trim();
+      const predictionResult = document.getElementById("predictionResult");
+      const graphContainer = document.getElementById("graphContainer");
+      const downloadBtn = document.getElementById("downloadBtn");
+
+      predictionResult.innerHTML = "";
+      graphContainer.innerHTML = "";
+      downloadBtn.style.display = "none";
+
+      try {
+        if (csvInput.files.length > 0) {
+          const formData = new FormData();
+          formData.append("file", csvInput.files[0]);
+
+          const response = await fetch("http://localhost:8000/predict", {
+            method: "POST",
+            body: formData
+          });
+
+          if (!response.ok) throw new Error("CSV upload failed. Check file format or server logs.");
+
+          if (response.headers.get("X-Graph-Exists") === "true") {
+            const graphData = response.headers.get("X-Graph-Data");
+            displayGraph(graphData);
+          }
+
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          downloadBtn.style.display = "block";
+          downloadBtn.onclick = () => {
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Predictions.csv";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          };
+
+        } else if (textInput !== "") {
+          const response = await fetch("http://localhost:8000/predict", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ text: textInput })
+          });
+
+          const data = await response.json();
+          if (!response.ok || data.error) throw new Error(data.error || "Text prediction failed.");
+
+          predictionResult.innerHTML = `✅ Sentiment: <span class='text-blue-700 font-bold'>${data.prediction}</span>`;
+        } else {
+          predictionResult.innerHTML = "⚠️ Please enter text or upload a CSV file.";
+        }
+
+      } catch (error) {
+        predictionResult.innerHTML = `❌ Error: <span class='text-red-600'>${error.message}</span>`;
+      }
+    }
+
+    function displayGraph(base64Image) {
+      const graphContainer = document.getElementById("graphContainer");
+      graphContainer.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = "data:image/png;base64," + base64Image;
+      img.alt = "Sentiment Graph";
+      img.className = "w-full h-auto mt-2 rounded-lg border border-gray-300 shadow";
+      graphContainer.appendChild(img);
+    }
+  </script>
+</body>
+</html>
